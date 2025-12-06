@@ -15,6 +15,20 @@ export interface LocalizationEntry {
   updated_at?: string;
 }
 
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface ComponentEntry {
+  id: string;
+  name: string;
+  code: string;
+  chat_history: ChatMessage[];
+  created_at?: string;
+  updated_at?: string;
+}
+
 // Simple database class for CRUD operations
 export class LocalizationDB {
   private static instance: LocalizationDB;
@@ -57,6 +71,48 @@ export class LocalizationDB {
   }
 }
 
+// Component database class for CRUD operations
+export class ComponentDB {
+  private static instance: ComponentDB;
+
+  static getInstance(): ComponentDB {
+    if (!ComponentDB.instance) {
+      ComponentDB.instance = new ComponentDB();
+    }
+    return ComponentDB.instance;
+  }
+
+  async init(): Promise<void> {
+    if (db) return;
+    await initializeDatabase();
+  }
+
+  async getAll(): Promise<ComponentEntry[]> {
+    await this.init();
+    return getAllComponents();
+  }
+
+  async getById(id: string): Promise<ComponentEntry | null> {
+    await this.init();
+    return getComponentById(id);
+  }
+
+  async create(entry: Omit<ComponentEntry, 'created_at' | 'updated_at'>): Promise<void> {
+    await this.init();
+    return createComponent(entry);
+  }
+
+  async update(id: string, updates: Partial<Pick<ComponentEntry, 'name' | 'code' | 'chat_history'>>): Promise<void> {
+    await this.init();
+    return updateComponent(id, updates);
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.init();
+    return deleteComponent(id);
+  }
+}
+
 export async function initializeDatabase(): Promise<void> {
   if (db) return; // Already initialized
 
@@ -72,10 +128,13 @@ export async function initializeDatabase(): Promise<void> {
       const uint8Array = new Uint8Array(savedDb.split(',').map(Number));
       db = new SQL.Database(uint8Array);
       console.log('Loaded existing database from localStorage');
+
+      // Run migrations for existing databases
+      await runMigrations();
     } else {
       // Create new database
       db = new SQL.Database();
-      
+
       // Create the localization table
       db.run(`
         CREATE TABLE localizations (
@@ -92,6 +151,18 @@ export async function initializeDatabase(): Promise<void> {
         )
       `);
 
+      // Create the components table
+      db.run(`
+        CREATE TABLE components (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          code TEXT NOT NULL,
+          chat_history TEXT DEFAULT '[]',
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now'))
+        )
+      `);
+
       // Insert initial data
       await seedInitialData();
       console.log('Created new database with initial data');
@@ -99,10 +170,35 @@ export async function initializeDatabase(): Promise<void> {
 
     // Save database to localStorage
     saveDatabaseToLocalStorage();
-    
+
   } catch (error) {
     console.error('Failed to initialize SQLite database:', error);
     throw error;
+  }
+}
+
+async function runMigrations(): Promise<void> {
+  if (!db) return;
+
+  // Check if components table exists, if not create it
+  const tableCheck = db.exec(`
+    SELECT name FROM sqlite_master
+    WHERE type='table' AND name='components'
+  `);
+
+  if (tableCheck.length === 0 || tableCheck[0].values.length === 0) {
+    console.log('Running migration: Creating components table');
+    db.run(`
+      CREATE TABLE components (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        code TEXT NOT NULL,
+        chat_history TEXT DEFAULT '[]',
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      )
+    `);
+    saveDatabaseToLocalStorage();
   }
 }
 
@@ -190,7 +286,7 @@ export async function getAllLocalizations(): Promise<LocalizationEntry[]> {
   const result = db!.exec('SELECT * FROM localizations ORDER BY key');
   if (result.length === 0) return [];
   
-  return result[0].values.map(row => ({
+  return result[0].values.map((row: (string | number | null | Uint8Array)[]) => ({
     id: row[0] as string,
     key: row[1] as string,
     en: row[2] as string,
@@ -260,8 +356,8 @@ export async function getTranslations(locale: string): Promise<Record<string, st
   const result = db!.exec(`SELECT key, ${locale} as translation FROM localizations`);
   if (result.length === 0) return {};
   
-  return result[0].values.reduce((acc, row) => {
-    acc[row[0] as string] = row[1] as string || '';
+  return result[0].values.reduce((acc: Record<string, string>, row: (string | number | null | Uint8Array)[]) => {
+    acc[row[0] as string] = (row[1] as string) || '';
     return acc;
   }, {} as Record<string, string>);
 }
@@ -271,4 +367,103 @@ export function closeDatabase(): void {
     db.close();
     db = null;
   }
+}
+
+// Component CRUD operations
+
+export async function getAllComponents(): Promise<ComponentEntry[]> {
+  if (!db) {
+    await initializeDatabase();
+  }
+
+  const result = db!.exec('SELECT * FROM components ORDER BY updated_at DESC');
+  if (result.length === 0) return [];
+
+  return result[0].values.map((row: (string | number | null | Uint8Array)[]) => ({
+    id: row[0] as string,
+    name: row[1] as string,
+    code: row[2] as string,
+    chat_history: JSON.parse((row[3] as string) || '[]') as ChatMessage[],
+    created_at: row[4] as string,
+    updated_at: row[5] as string
+  }));
+}
+
+export async function getComponentById(id: string): Promise<ComponentEntry | null> {
+  if (!db) {
+    await initializeDatabase();
+  }
+
+  const result = db!.exec('SELECT * FROM components WHERE id = ?', [id]);
+  if (result.length === 0 || result[0].values.length === 0) return null;
+
+  const row = result[0].values[0];
+  return {
+    id: row[0] as string,
+    name: row[1] as string,
+    code: row[2] as string,
+    chat_history: JSON.parse((row[3] as string) || '[]') as ChatMessage[],
+    created_at: row[4] as string,
+    updated_at: row[5] as string
+  };
+}
+
+export async function createComponent(entry: Omit<ComponentEntry, 'created_at' | 'updated_at'>): Promise<void> {
+  if (!db) {
+    await initializeDatabase();
+  }
+
+  db!.run(`
+    INSERT INTO components (id, name, code, chat_history)
+    VALUES (?, ?, ?, ?)
+  `, [entry.id, entry.name, entry.code, JSON.stringify(entry.chat_history)]);
+
+  saveDatabaseToLocalStorage();
+}
+
+export async function updateComponent(
+  id: string,
+  updates: Partial<Pick<ComponentEntry, 'name' | 'code' | 'chat_history'>>
+): Promise<void> {
+  if (!db) {
+    await initializeDatabase();
+  }
+
+  const setClauses: string[] = [];
+  const values: (string | null)[] = [];
+
+  if (updates.name !== undefined) {
+    setClauses.push('name = ?');
+    values.push(updates.name);
+  }
+  if (updates.code !== undefined) {
+    setClauses.push('code = ?');
+    values.push(updates.code);
+  }
+  if (updates.chat_history !== undefined) {
+    setClauses.push('chat_history = ?');
+    values.push(JSON.stringify(updates.chat_history));
+  }
+
+  if (setClauses.length === 0) return;
+
+  setClauses.push("updated_at = datetime('now')");
+  values.push(id);
+
+  db!.run(`
+    UPDATE components
+    SET ${setClauses.join(', ')}
+    WHERE id = ?
+  `, values);
+
+  saveDatabaseToLocalStorage();
+}
+
+export async function deleteComponent(id: string): Promise<void> {
+  if (!db) {
+    await initializeDatabase();
+  }
+
+  db!.run('DELETE FROM components WHERE id = ?', [id]);
+  saveDatabaseToLocalStorage();
 } 
