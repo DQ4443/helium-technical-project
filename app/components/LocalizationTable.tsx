@@ -3,7 +3,11 @@
 import { useState, useEffect } from 'react';
 import { LocalizationDB, LocalizationEntry } from '../lib/database';
 
-export default function LocalizationTable() {
+interface LocalizationTableProps {
+  onTranslationsUpdated?: () => void;
+}
+
+export default function LocalizationTable({ onTranslationsUpdated }: LocalizationTableProps) {
   const [entries, setEntries] = useState<LocalizationEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,16 +36,17 @@ export default function LocalizationTable() {
 
   const handleSave = async () => {
     if (!editingCell) return;
-    
+
     try {
       await db.update(editingCell.entryId, editingCell.field, editValue);
-      setEntries(prev => prev.map(entry => 
-        entry.id === editingCell.entryId 
+      setEntries(prev => prev.map(entry =>
+        entry.id === editingCell.entryId
           ? { ...entry, [editingCell.field]: editValue }
           : entry
       ));
       setEditingCell(null);
       setEditValue('');
+      onTranslationsUpdated?.();
     } catch (error) {
       console.error('Failed to save:', error);
       setError(error instanceof Error ? error.message : 'Failed to save');
@@ -78,6 +83,7 @@ export default function LocalizationTable() {
     try {
       await db.create(newEntry);
       setEntries(prev => [...prev, { ...newEntry, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }].sort((a, b) => a.key.localeCompare(b.key)));
+      onTranslationsUpdated?.();
     } catch (error) {
       console.error('Failed to create entry:', error);
       setError(error instanceof Error ? error.message : 'Failed to create entry');
@@ -88,6 +94,7 @@ export default function LocalizationTable() {
     try {
       await db.delete(id);
       setEntries(prev => prev.filter(entry => entry.id !== id));
+      onTranslationsUpdated?.();
     } catch (error) {
       console.error('Failed to delete entry:', error);
       setError(error instanceof Error ? error.message : 'Failed to delete entry');

@@ -95,39 +95,61 @@ export default function Editor({ activeComponent, onComponentSaved, onNewCompone
         const currentEntries = await localizationDb.getAll();
         const currentKeys = new Set(currentEntries.map(e => e.key));
 
-        let addedAny = false;
-
-        // Save each translation to the database
+        // Filter to only new keys
+        const newTranslations: Record<string, string> = {};
         for (const [key, englishText] of Object.entries(translations)) {
-          // Check if key already exists in database
           if (!currentKeys.has(key)) {
-            const newEntry = {
-              id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-              key,
-              en: englishText,
-              es: '',
-              fr: '',
-              de: '',
-              ja: '',
-              zh: ''
-            };
-            try {
-              await localizationDb.create(newEntry);
-              console.log('Created new translation key:', key);
-              currentKeys.add(key); // Prevent duplicates within same batch
-              addedAny = true;
-            } catch (err) {
-              // Key might already exist due to race condition, skip it
-              console.log('Key already exists:', key);
-            }
+            newTranslations[key] = englishText;
           }
         }
 
-        // Only refresh if we actually added something
-        if (addedAny) {
-          setTranslationsVersion(v => v + 1);
-          onTranslationsUpdated?.();
+        if (Object.keys(newTranslations).length === 0) {
+          console.log('No new translation keys to add');
+          return;
         }
+
+        console.log('New translations to add:', newTranslations);
+
+        // Call translation API to get all languages
+        let autoTranslations: Record<string, Record<string, string>> = {};
+        try {
+          const response = await fetch('/api/translate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ texts: newTranslations })
+          });
+          const data = await response.json();
+          autoTranslations = data.translations || {};
+          console.log('Auto-translations received:', autoTranslations);
+        } catch (translateError) {
+          console.error('Auto-translation failed, using English only:', translateError);
+        }
+
+        // Save each translation to the database with all languages
+        for (const [key, englishText] of Object.entries(newTranslations)) {
+          const translated = autoTranslations[key] || {};
+          const newEntry = {
+            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+            key,
+            en: englishText,
+            es: translated.es || '',
+            fr: translated.fr || '',
+            de: translated.de || '',
+            ja: translated.ja || '',
+            zh: translated.zh || ''
+          };
+          try {
+            await localizationDb.create(newEntry);
+            console.log('Created new translation key with auto-translations:', key, newEntry);
+            currentKeys.add(key); // Prevent duplicates within same batch
+          } catch (err) {
+            // Key might already exist due to race condition, skip it
+            console.log('Key already exists:', key);
+          }
+        }
+
+        setTranslationsVersion(v => v + 1);
+        onTranslationsUpdated?.();
       } catch (error) {
         console.error('Failed to parse or save translations:', error);
       }

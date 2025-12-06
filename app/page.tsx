@@ -96,17 +96,18 @@ export default function Home() {
       />
 
       <main className="flex-1 ml-64">
-        {currentPage === 'editor' && (
+        {/* Keep both components mounted to preserve state, hide inactive with CSS */}
+        <div className={currentPage === 'editor' ? 'h-full' : 'hidden'}>
           <Editor
             activeComponent={activeComponent}
             onComponentSaved={handleComponentSaved}
             onNewComponent={handleNewComponent}
             onTranslationsUpdated={handleTranslationsUpdated}
           />
-        )}
-        {currentPage === 'localization' && (
+        </div>
+        <div className={currentPage === 'localization' ? 'h-full' : 'hidden'}>
           <LocalizationTable onTranslationsUpdated={handleTranslationsUpdated} />
-        )}
+        </div>
       </main>
     </div>
   );
