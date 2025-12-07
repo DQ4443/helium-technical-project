@@ -331,30 +331,22 @@ export default function Editor({ activeComponent, onComponentSaved, onNewCompone
     }
   };
 
-  // Save to DB only (without triggering React state updates)
+  // Save to DB only - absolutely no state updates
   const saveToDbOnly = useCallback(async (code: string) => {
-    if (!activeComponent || !componentName.trim()) return;
+    if (!activeComponent) {
+      console.log('No active component to save');
+      return;
+    }
 
     try {
-      const chatHistory = convertMessagesToStorage();
       await componentDb.update(activeComponent.id, {
-        name: componentName,
         code: code,
-        chat_history: chatHistory
       });
-
-      const updated: ComponentEntry = {
-        ...activeComponent,
-        name: componentName,
-        code: code,
-        chat_history: chatHistory,
-        updated_at: new Date().toISOString()
-      };
-      onComponentSaved(updated);
+      console.log('Saved to DB successfully');
     } catch (error) {
-      console.error('Failed to save component:', error);
+      console.error('Failed to save:', error);
     }
-  }, [activeComponent, componentName, convertMessagesToStorage, componentDb, onComponentSaved]);
+  }, [activeComponent, componentDb]);
 
   // Determine if we should show the preview panel
   const shouldShowPreview = currentComponent && showPreview;

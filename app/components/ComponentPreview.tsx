@@ -622,47 +622,41 @@ export default function App() {
 
       {/* Multi-Language Comparison Mode */}
       {viewMode === 'compare' && (
-        <div className="flex-1 min-h-0 overflow-auto p-4">
-          <div className={`grid gap-4 h-full ${
-            selectedCompareLocales.length <= 2 ? 'grid-cols-2' :
-            selectedCompareLocales.length <= 3 ? 'grid-cols-3' :
-            'grid-cols-2 lg:grid-cols-3'
-          }`}>
-            {selectedCompareLocales.map(localeCode => {
-              const locale = ALL_LOCALES.find(l => l.code === localeCode);
-              const localeTranslations = allTranslations[localeCode] || {};
-              return (
-                <div key={localeCode} className="flex flex-col border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-800">
-                  <div className="bg-gray-50 dark:bg-gray-700 px-3 py-2 border-b border-gray-200 dark:border-gray-600 flex items-center gap-2">
-                    <span>{locale?.flag}</span>
-                    <span className="font-medium text-sm text-gray-900 dark:text-white">{locale?.name}</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">({Object.keys(localeTranslations).length} keys)</span>
-                  </div>
-                  <div className="flex-1 min-h-[300px]">
-                    <SandpackProvider
-                      key={`compare-${localeCode}-${sandpackKey}`}
-                      template="react"
-                      theme="light"
-                      files={{
-                        '/App.js': createLocalePreview(localeCode, localeTranslations),
-                        '/Component.js': displayCode,
-                      }}
-                      options={{
-                        autorun: true,
-                        externalResources: ['https://cdn.tailwindcss.com'],
-                      }}
-                    >
-                      <SandpackPreview
-                        style={{ height: '100%', width: '100%' }}
-                        showOpenInCodeSandbox={false}
-                        showRefreshButton={false}
-                      />
-                    </SandpackProvider>
-                  </div>
+        <div className="flex-1 p-4" style={{ display: 'grid', gridTemplateColumns: selectedCompareLocales.length <= 2 ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gridTemplateRows: '1fr', gap: '1rem', minHeight: 0 }}>
+          {selectedCompareLocales.map(localeCode => {
+            const locale = ALL_LOCALES.find(l => l.code === localeCode);
+            const localeTranslations = allTranslations[localeCode] || {};
+            return (
+              <div key={localeCode} className="flex flex-col border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-800" style={{ minHeight: 0 }}>
+                <div className="bg-gray-50 dark:bg-gray-700 px-3 py-2 border-b border-gray-200 dark:border-gray-600 flex items-center gap-2 flex-shrink-0">
+                  <span>{locale?.flag}</span>
+                  <span className="font-medium text-sm text-gray-900 dark:text-white">{locale?.name}</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">({Object.keys(localeTranslations).length} keys)</span>
                 </div>
-              );
-            })}
-          </div>
+                <div className="flex-1" style={{ minHeight: 0 }}>
+                  <SandpackProvider
+                    key={`compare-${localeCode}-${sandpackKey}`}
+                    template="react"
+                    theme="light"
+                    files={{
+                      '/App.js': createLocalePreview(localeCode, localeTranslations),
+                      '/Component.js': displayCode,
+                    }}
+                    options={{
+                      autorun: true,
+                      externalResources: ['https://cdn.tailwindcss.com'],
+                    }}
+                  >
+                    <SandpackPreview
+                      style={{ height: '100%', width: '100%' }}
+                      showOpenInCodeSandbox={false}
+                      showRefreshButton={false}
+                    />
+                  </SandpackProvider>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
