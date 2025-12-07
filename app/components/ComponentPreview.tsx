@@ -435,6 +435,8 @@ export default function App() {
             }}
             options={{
               autorun: true,
+              recompileMode: 'immediate',
+              recompileDelay: 300,
               externalResources: ['https://cdn.tailwindcss.com'],
               activeFile: '/Component.js',
             }}
