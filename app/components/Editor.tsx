@@ -63,6 +63,7 @@ export default function Editor({ activeComponent, onComponentSaved, onNewCompone
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isEnhancingPrompt, setIsEnhancingPrompt] = useState(false);
   const [editMode, setEditMode] = useState<'new' | 'iterate'>('new');
+  const [showPreview, setShowPreview] = useState(true);
 
   const componentDb = ComponentDB.getInstance();
   const localizationDb = LocalizationDB.getInstance();
@@ -330,10 +331,38 @@ export default function Editor({ activeComponent, onComponentSaved, onNewCompone
     }
   };
 
+  // Save to DB only (without triggering React state updates)
+  const saveToDbOnly = useCallback(async (code: string) => {
+    if (!activeComponent || !componentName.trim()) return;
+
+    try {
+      const chatHistory = convertMessagesToStorage();
+      await componentDb.update(activeComponent.id, {
+        name: componentName,
+        code: code,
+        chat_history: chatHistory
+      });
+
+      const updated: ComponentEntry = {
+        ...activeComponent,
+        name: componentName,
+        code: code,
+        chat_history: chatHistory,
+        updated_at: new Date().toISOString()
+      };
+      onComponentSaved(updated);
+    } catch (error) {
+      console.error('Failed to save component:', error);
+    }
+  }, [activeComponent, componentName, convertMessagesToStorage, componentDb, onComponentSaved]);
+
+  // Determine if we should show the preview panel
+  const shouldShowPreview = currentComponent && showPreview;
+
   return (
     <div className="flex h-full">
       {/* Chat Section */}
-      <div className="w-1/2 flex flex-col relative">
+      <div className={`flex flex-col relative transition-all duration-300 ${shouldShowPreview ? 'w-1/2' : 'w-full'}`}>
         {/* Header with component name and save */}
         <div className="border-b border-gray-200 dark:border-gray-700 p-4 flex items-center gap-4">
           <button
@@ -381,6 +410,24 @@ export default function Editor({ activeComponent, onComponentSaved, onNewCompone
               </>
             )}
           </button>
+          {/* Toggle preview button */}
+          {currentComponent && (
+            <button
+              onClick={() => setShowPreview(!showPreview)}
+              className="p-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+              title={showPreview ? 'Hide Preview' : 'Show Preview'}
+            >
+              {showPreview ? (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                </svg>
+              )}
+            </button>
+          )}
         </div>
 
         {/* Scrollable Messages Area */}
@@ -598,13 +645,21 @@ export default function Editor({ activeComponent, onComponentSaved, onNewCompone
         </div>
       </div>
 
-      {/* Preview Section */}
-      <div className="w-1/2 border-l border-gray-200 dark:border-gray-700">
-        <ComponentPreview
-          componentCode={currentComponent}
-          translationsVersion={translationsVersion}
-        />
-      </div>
+      {/* Preview Section - only show when there's a component and preview is enabled */}
+      {shouldShowPreview && (
+        <div className="w-1/2 border-l border-gray-200 dark:border-gray-700">
+          <ComponentPreview
+            componentCode={currentComponent}
+            translationsVersion={translationsVersion}
+            onSaveOnly={saveToDbOnly}
+            onCodeChange={(code) => {
+              // Update the current component code
+              setCurrentComponent(code);
+              setHasUnsavedChanges(true);
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }
